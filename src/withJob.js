@@ -37,6 +37,7 @@ export default function withJob(work : Work, config : Config = defaultConfig) {
 
       constructor(props : Props) {
         super(props);
+        this._ready = false;
         this.state = {
           inProgress: false,
           completed: false,
@@ -46,12 +47,18 @@ export default function withJob(work : Work, config : Config = defaultConfig) {
       componentWillMount() {
         const { jobInitState } = this.props;
 
+        this._ready = !!(typeof window !== 'undefined');
+
         if (jobInitState) {
-          this.setState(jobInitState);
+          this.setStateSAFE(jobInitState);
           return;
         }
 
         this.handleWork(this.props);
+      }
+
+      componentWillUnmount () {
+        this._ready = false;
       }
 
       componentWillReceiveProps(nextProps : Props) {
@@ -69,7 +76,15 @@ export default function withJob(work : Work, config : Config = defaultConfig) {
         this.handleWork(nextProps);
       }
 
+      isReady() { return !!this._ready; }
+
+      setStateSAFE (state, fn) {
+        return this.isReady() ? this.setState(state, fn) : null;
+      }
+
       handleWork(props : Props) {
+        if (!this._ready) return;
+
         const { onJobProcessed } = this.props;
         let workResult;
 
@@ -78,18 +93,18 @@ export default function withJob(work : Work, config : Config = defaultConfig) {
         } catch (error) {
           // Either a syncrhnous error or an error setting up the asynchronous
           // promise.
-          this.setState({ completed: true, error });
+          this.setStateSAFE({ completed: true, error });
           return;
         }
 
         if (isPromise(workResult)) {
           workResult
             .then((result) => {
-              this.setState({ completed: true, inProgress: false, result });
+              this.setStateSAFE({ completed: true, inProgress: false, result });
               return result;
             })
             .catch((error) => {
-              this.setState({ completed: true, inProgress: false, error });
+              this.setStateSAFE({ completed: true, inProgress: false, error });
             })
             .then(() => {
               if (onJobProcessed) {
@@ -98,10 +113,10 @@ export default function withJob(work : Work, config : Config = defaultConfig) {
             });
 
           // Asynchronous result.
-          this.setState({ completed: false, inProgress: true, executingJob: workResult });
+          this.setStateSAFE({ completed: false, inProgress: true, executingJob: workResult });
         } else {
           // Synchronous result.
-          this.setState({ completed: true, result: workResult });
+          this.setStateSAFE({ completed: true, result: workResult });
         }
       }
 
